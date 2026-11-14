@@ -1,0 +1,307 @@
+[vars]
+# Available models:
+# deepseek-r1:32b (20 GB, reasoning/thinking)
+# qwen3-coder-next:q4_K_M (52 GB, agentic coding; tight on 64 GB)
+# qwen3.8:27b-q8_0 (27 GB, high-precision general/coding)
+# qwen3.8-27B-GGUF:UD-Q5_K_M (custom GGUF import, Q5_K_M)
+# qwen3-coder:30b-a3b-q4_K_M (19 GB, fast agentic coding)
+# qwen2.5-coder:32b-instruct-q4_K_M (20 GB, code generation/repair)
+# glm-4.7-flash:q4_K_M (17 GB, fast general purpose)
+# nemotron-3.5-lightning:30b-a3b-q4_K_M (25 GB, agent-focused MoE)
+# llama3:70b-instruct-q4_K_M (43 GB, general purpose; tight on 64 GB)
+# mixtral:8x7b-instruct-v0.1-q4_K_M (28 GB, MoE general purpose)
+qwen_model = "deepseek-r1:32b"
+ollama_address = "127.0.0.1"
+ollama_port = "11435"
+ollama_context_length = "32768"
+
+[tasks.select-model]
+description = "Select a model to use for local coding"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+models=(
+  "deepseek-r1:32b"
+  "qwen3-coder-next:q4_K_M"
+  "qwen3.8:27b-q8_0"
+  "qwen3.8-27B-GGUF:UD-Q5_K_M"
+  "qwen3-coder:30b-a3b-q4_K_M"
+  "qwen2.5-coder:32b-instruct-q4_K_M"
+  "glm-4.7-flash:q4_K_M"
+  "nemotron-3.5-lightning:30b-a3b-q4_K_M"
+  "llama3:70b-instruct-q4_K_M"
+  "mixtral:8x7b-instruct-v0.1-q4_K_M"
+)
+model_count=$(printf '%s\n' "${models[@]}" | wc -l | tr -d ' ')
+
+if [[ $# -gt 1 ]]; then
+  printf 'Usage: mise run select-model [model]\n' >&2
+  exit 2
+fi
+
+if [[ $# -eq 1 ]]; then
+  selected_model=$1
+else
+  echo "Available models:"
+  echo "1) deepseek-r1:32b (20 GB, reasoning/thinking)"
+  echo "2) qwen3-coder-next:q4_K_M (52 GB, agentic coding; tight on 64 GB)"
+  echo "3) qwen3.8:27b-q8_0 (27 GB, high-precision general/coding)"
+  echo "4) qwen3.8-27B-GGUF:UD-Q5_K_M (custom GGUF import, Q5_K_M)"
+  echo "5) qwen3-coder:30b-a3b-q4_K_M (19 GB, fast agentic coding)"
+  echo "6) qwen2.5-coder:32b-instruct-q4_K_M (20 GB, code generation/repair)"
+  echo "7) glm-4.7-flash:q4_K_M (17 GB, fast general purpose)"
+  echo "8) nemotron-3.5-lightning:30b-a3b-q4_K_M (25 GB, agent-focused MoE)"
+  echo "9) llama3:70b-instruct-q4_K_M (43 GB, general purpose; tight on 64 GB)"
+  echo "10) mixtral:8x7b-instruct-v0.1-q4_K_M (28 GB, MoE general purpose)"
+  echo "11) Set context length to 32K (32768)"
+  echo "12) Set context length to 64K (65536)"
+  echo "0) Quit"
+  echo ""
+  read -r -p "Select a model (1-$model_count, 11-12 for context, 0 to quit) [8]: " choice
+  choice=${choice:-8}
+  if [[ $choice == 0 ]]; then
+    echo "No changes made."
+    exit 0
+  fi
+  if [[ $choice == 11 || $choice == 12 ]]; then
+    if [[ $choice == 11 ]]; then
+      new_context=32768
+    else
+      new_context=65536
+    fi
+    sed -i '' "s|^ollama_context_length = .*|ollama_context_length = \"$new_context\"|" "{{config_root}}/mise.toml"
+    echo "Context length updated to: $new_context"
+    echo "Run 'mise run local' to use it."
+    exit 0
+  fi
+  if [[ ! $choice =~ ^[0-9]+$ ]] || (( choice < 1 || choice > model_count )); then
+    echo "Invalid selection" >&2
+    exit 1
+  fi
+  selected_model=${models[$((choice-1))]}
+fi
+
+if ! command -v ollama >/dev/null 2>&1; then
+  printf 'Ollama is required to check and pull %s. Run mise run local setup first.\n' "$selected_model" >&2
+  exit 1
+fi
+
+ollama_host=${OLLAMA_HOST:-127.0.0.1:11435}
+server_ready() {
+  curl --noproxy '*' --max-time 1 --fail --silent "http://$ollama_host/api/version" >/dev/null 2>&1
+}
+
+profile=
+ollama_pid=
+cleanup() {
+  if [[ -n "$ollama_pid" ]]; then
+    kill "$ollama_pid" 2>/dev/null || true
+    wait "$ollama_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$profile" ]]; then
+    rm -rf -- "$profile"
+  fi
+}
+trap cleanup EXIT
+
+if ! server_ready; then
+  profile=$(mktemp -d "${TMPDIR:-/tmp}/mise-select-model.XXXXXX")
+  OLLAMA_HOST=$ollama_host ollama serve >"$profile/ollama.log" 2>&1 &
+  ollama_pid=$!
+  ready=false
+  for (( attempt=0; attempt<60; attempt++ )); do
+    kill -0 "$ollama_pid" 2>/dev/null || break
+    if server_ready; then
+      ready=true
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$ready" != true ]]; then
+    cat "$profile/ollama.log" >&2
+    printf 'Ollama did not start on %s.\n' "$ollama_host" >&2
+    exit 1
+  fi
+fi
+
+if OLLAMA_HOST=$ollama_host ollama show "$selected_model" >/dev/null 2>&1; then
+  printf '%s is already pulled.\n' "$selected_model"
+else
+  printf '%s is not pulled; pulling now...\n' "$selected_model"
+  OLLAMA_HOST=$ollama_host ollama pull "$selected_model"
+fi
+
+# Update the qwen_model variable only after the model is available.
+escaped_model=${selected_model//\\/\\\\}
+escaped_model=${escaped_model//&/\\&}
+escaped_model=${escaped_model//|/\\|}
+sed -i '' "s|^qwen_model = .*|qwen_model = \"$escaped_model\"|" "{{config_root}}/mise.toml"
+
+echo "Model updated to: $selected_model"
+echo "Run 'mise run local verify' to test it."
+'''
+
+[tasks.select-model.env]
+OLLAMA_HOST = "{{ vars.ollama_address }}:{{ vars.ollama_port }}"
+NO_PROXY = "{{ vars.ollama_address }},localhost"
+no_proxy = "{{ vars.ollama_address }},localhost"
+
+[tasks.local]
+description = "Run the local coding stack: mise run local [setup|verify|launch]"
+dir = "{{config_root}}"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+action=${1:-launch}
+case "$action" in
+  setup|verify|launch) ;;
+  *) printf 'Usage: mise run local [setup|verify|launch]\n' >&2; exit 2 ;;
+esac
+if [[ $# -gt 1 ]]; then
+  printf 'Usage: mise run local [setup|verify|launch]\n' >&2
+  exit 2
+fi
+
+if [[ "$action" == setup ]]; then
+  for package in ollama opencode; do
+    if ! command -v "$package" >/dev/null; then
+      if ! command -v brew >/dev/null; then
+        printf 'Homebrew is required to install %s.\n' "$package" >&2
+        exit 1
+      fi
+      HOMEBREW_NO_INSTALL_CLEANUP=1 brew install "$package"
+    fi
+  done
+fi
+
+for executable in ollama opencode; do
+  if ! command -v "$executable" >/dev/null; then
+    printf 'Missing %s. Run mise run local setup.\n' "$executable" >&2
+    exit 1
+  fi
+done
+
+opencode_version=$(opencode --version)
+version_number=${opencode_version#opencode }
+case "${version_number#v}" in
+  2.*) ;;
+  *) printf 'This setup requires OpenCode 2.x; found %s.\n' "$opencode_version" >&2; exit 1 ;;
+esac
+
+model={{ vars.qwen_model | quote }}
+ollama_port=${OLLAMA_HOST##*:}
+if lsof -nP -iTCP:"$ollama_port" -sTCP:LISTEN >/dev/null; then
+  printf 'Port %s is in use. Close the process using it before retrying.\n' "$ollama_port" >&2
+  exit 1
+fi
+
+umask 077
+profile=$(mktemp -d "${TMPDIR:-/tmp}/mise-local-code.XXXXXX")
+ollama_pid=
+cleanup() {
+  if [[ -n "$ollama_pid" ]]; then
+    kill "$ollama_pid" 2>/dev/null || true
+    wait "$ollama_pid" 2>/dev/null || true
+  fi
+  rm -rf -- "$profile"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+ollama serve >"$profile/ollama.log" 2>&1 &
+ollama_pid=$!
+ready=false
+for (( attempt=0; attempt<60; attempt++ )); do
+  kill -0 "$ollama_pid" 2>/dev/null || break
+  if grep -Fq "Listening on $OLLAMA_HOST" "$profile/ollama.log" &&
+    curl --noproxy '*' --max-time 1 --fail --silent "http://$OLLAMA_HOST/api/version" >/dev/null; then
+    ready=true
+    break
+  fi
+  sleep 1
+done
+if [[ "$ready" == false ]]; then
+  cat "$profile/ollama.log" >&2
+  printf 'Ollama did not start on %s.\n' "$OLLAMA_HOST" >&2
+  exit 1
+fi
+
+if [[ "$action" == setup ]] && ! ollama show "$model" >/dev/null 2>&1; then
+  ollama pull "$model"
+fi
+if ! ollama show "$model" >/dev/null; then
+  printf 'The local model is unavailable. Run mise run local setup.\n' >&2
+  exit 1
+fi
+if [[ "$action" == setup ]]; then
+  printf 'Setup complete. Run mise run local verify, then mise run local.\n'
+  exit 0
+fi
+
+# Use a private profile and server so existing settings and sessions are not loaded.
+mkdir -p "$profile/config/opencode" "$profile/home"
+cat > "$profile/config/opencode/opencode.json" <<JSON
+{
+  "update": "disable",
+  "model": "local/qwen",
+  "providers": {
+    "local": {
+      "name": "Ollama (local)",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "http://$OLLAMA_HOST/v1" },
+      "models": {
+        "qwen": {
+          "modelID": "$model",
+          "name": "$model",
+          "capabilities": { "tools": true },
+          "limit": { "context": $OLLAMA_CONTEXT_LENGTH, "output": 4096 }
+        }
+      }
+    }
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "local", "effect": "allow" }
+  ],
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "ask" },
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+    { "action": "webfetch", "resource": "*", "effect": "deny" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+JSON
+
+run_opencode() {
+  env -i PATH="$PATH" HOME="$profile/home" TERM="${TERM:-xterm-256color}" \
+    XDG_CONFIG_HOME="$profile/config" XDG_DATA_HOME="$profile/data" \
+    XDG_CACHE_HOME="$profile/cache" XDG_STATE_HOME="$profile/state" \
+    OPENCODE_DISABLE_PROJECT_CONFIG=1 \
+    OPENCODE_CLI_CONFIG_CONTENT='{"session":{"permissions":"prompt"}}' \
+    opencode "$@"
+}
+
+if [[ "$action" == verify ]]; then
+  response=$(run_opencode run --standalone --model local/qwen \
+    'Reply with exactly this text and use no tools: LOCAL_QWEN_READY')
+  printf '%s\n' "$response"
+  if ! grep -Fq LOCAL_QWEN_READY <<<"$response"; then
+    printf 'OpenCode did not return the expected local model response.\n' >&2
+    exit 1
+  fi
+  ollama ps
+else
+  run_opencode --standalone
+fi
+'''
+
+[tasks.local.env]
+OLLAMA_HOST = "{{ vars.ollama_address }}:{{ vars.ollama_port }}"
+OLLAMA_CONTEXT_LENGTH = "{{ vars.ollama_context_length }}"
+OLLAMA_NO_CLOUD = "1"
+NO_PROXY = "{{ vars.ollama_address }},localhost"
+no_proxy = "{{ vars.ollama_address }},localhost"

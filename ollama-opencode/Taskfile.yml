@@ -1,0 +1,17 @@
+version: '3'
+
+tasks:
+  setup:
+    desc: Install local tools, prepare the model, and write project settings
+    cmds:
+      - sh scripts/local-setup.sh setup
+  verify:
+    desc: Check the local model, server, and project settings
+    cmds:
+      - sh scripts/local-setup.sh verify
+  smoke:
+    desc: Run a local inference test through Ollama and OpenCode
+    cmds:
+      - sh scripts/local-setup.sh verify
+      - OLLAMA_HOST=127.0.0.1:11434 ollama run qwen3-coder-local:32k 'Reply with the single word READY.'
+      - opencode run --standalone --model ollama/qwen3-coder-local:32k 'Reply with the single word READY.'
