@@ -9,7 +9,7 @@ To switch between different models, run:
 mise run select-model
 ```
 
-Select `0` to quit without changing the model. Select `11` for a 32K context (`32768`) or `12` for a 64K context (`65536`). When you switch, the task checks whether the model is already pulled and pulls it if it is missing.
+Select `0` to quit. The 32K and 64K context options appear after the last model. Press Enter to select the model configured as `menu_default_model`. When you switch, the task checks whether the model is already pulled and pulls it if it is missing.
 
 The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run local` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`.
 
@@ -18,17 +18,7 @@ You can also pass a model directly:
 mise run select-model qwen3-coder-next:q4_K_M
 ```
 
-Available models:
-- `deepseek-r1:32b` — 20 GB, reasoning/thinking
-- `qwen3-coder-next:q4_K_M` — 52 GB, agentic coding; tight on 64 GB
-- `qwen3.8:27b-q8_0` — 27 GB, high-precision general/coding
-- `qwen3.8-27B-GGUF:UD-Q5_K_M` — custom GGUF import, Q5_K_M
-- `qwen3-coder:30b-a3b-q4_K_M` — 19 GB, fast agentic coding
-- `qwen2.5-coder:32b-instruct-q4_K_M` — 20 GB, code generation/repair
-- `glm-4.7-flash:q4_K_M` — 17 GB, fast general purpose
-- `nemotron-3.5-lightning:30b-a3b-q4_K_M` — 25 GB, agent-focused MoE (menu default when pressing Enter)
-- `llama3:70b-instruct-q4_K_M` — 43 GB, general purpose; tight on 64 GB
-- `mixtral:8x7b-instruct-v0.1-q4_K_M` — 28 GB, MoE general purpose
+To customize the menu, edit `models` in [mise.toml](mise.toml). Use one `tag|description` line per model.
 
 ## Taskfile
 

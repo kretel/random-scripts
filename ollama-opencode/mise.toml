@@ -1,19 +1,22 @@
 [vars]
-# Available models:
-# deepseek-r1:32b (20 GB, reasoning/thinking)
-# qwen3-coder-next:q4_K_M (52 GB, agentic coding; tight on 64 GB)
-# qwen3.8:27b-q8_0 (27 GB, high-precision general/coding)
-# qwen3.8-27B-GGUF:UD-Q5_K_M (custom GGUF import, Q5_K_M)
-# qwen3-coder:30b-a3b-q4_K_M (19 GB, fast agentic coding)
-# qwen2.5-coder:32b-instruct-q4_K_M (20 GB, code generation/repair)
-# glm-4.7-flash:q4_K_M (17 GB, fast general purpose)
-# nemotron-3.5-lightning:30b-a3b-q4_K_M (25 GB, agent-focused MoE)
-# llama3:70b-instruct-q4_K_M (43 GB, general purpose; tight on 64 GB)
-# mixtral:8x7b-instruct-v0.1-q4_K_M (28 GB, MoE general purpose)
+# One model tag and description per line, separated by |.
+models = """
+deepseek-r1:32b|20 GB, reasoning/thinking
+qwen3-coder-next:q4_K_M|52 GB, agentic coding; tight on 64 GB
+qwen3.8:27b-q8_0|27 GB, high-precision general/coding
+qwen3.8-27B-GGUF:UD-Q5_K_M|custom GGUF import, Q5_K_M
+qwen3-coder:30b-a3b-q4_K_M|19 GB, fast agentic coding
+qwen2.5-coder:32b-instruct-q4_K_M|20 GB, code generation/repair
+glm-4.7-flash:q4_K_M|17 GB, fast general purpose
+nemotron-3.5-lightning:30b-a3b-q4_K_M|25 GB, agent-focused MoE
+llama3:70b-instruct-q4_K_M|43 GB, general purpose; tight on 64 GB
+mixtral:8x7b-instruct-v0.1-q4_K_M|28 GB, MoE general purpose
+"""
+menu_default_model = "nemotron-3.5-lightning:30b-a3b-q4_K_M"
 qwen_model = "deepseek-r1:32b"
 ollama_address = "127.0.0.1"
 ollama_port = "11435"
-ollama_context_length = "65536"
+ollama_context_length = "32768"
 _.file = ".env"
 
 [tasks.select-model]
@@ -42,20 +45,6 @@ save_local_var() {
   return 1
 }
 
-models=(
-  "deepseek-r1:32b"
-  "qwen3-coder-next:q4_K_M"
-  "qwen3.8:27b-q8_0"
-  "qwen3.8-27B-GGUF:UD-Q5_K_M"
-  "qwen3-coder:30b-a3b-q4_K_M"
-  "qwen2.5-coder:32b-instruct-q4_K_M"
-  "glm-4.7-flash:q4_K_M"
-  "nemotron-3.5-lightning:30b-a3b-q4_K_M"
-  "llama3:70b-instruct-q4_K_M"
-  "mixtral:8x7b-instruct-v0.1-q4_K_M"
-)
-model_count=$(printf '%s\n' "${models[@]}" | wc -l | tr -d ' ')
-
 if [[ $# -gt 1 ]]; then
   printf 'Usage: mise run select-model [model]\n' >&2
   exit 2
@@ -64,29 +53,35 @@ fi
 if [[ $# -eq 1 ]]; then
   selected_model=$1
 else
+  menu_default_model={{ vars.menu_default_model | quote }}
+  default_choice=0
+  model_count=0
+  models=()
   echo "Available models:"
-  echo "1) deepseek-r1:32b (20 GB, reasoning/thinking)"
-  echo "2) qwen3-coder-next:q4_K_M (52 GB, agentic coding; tight on 64 GB)"
-  echo "3) qwen3.8:27b-q8_0 (27 GB, high-precision general/coding)"
-  echo "4) qwen3.8-27B-GGUF:UD-Q5_K_M (custom GGUF import, Q5_K_M)"
-  echo "5) qwen3-coder:30b-a3b-q4_K_M (19 GB, fast agentic coding)"
-  echo "6) qwen2.5-coder:32b-instruct-q4_K_M (20 GB, code generation/repair)"
-  echo "7) glm-4.7-flash:q4_K_M (17 GB, fast general purpose)"
-  echo "8) nemotron-3.5-lightning:30b-a3b-q4_K_M (25 GB, agent-focused MoE)"
-  echo "9) llama3:70b-instruct-q4_K_M (43 GB, general purpose; tight on 64 GB)"
-  echo "10) mixtral:8x7b-instruct-v0.1-q4_K_M (28 GB, MoE general purpose)"
-  echo "11) Set context length to 32K (32768)"
-  echo "12) Set context length to 64K (65536)"
+  while IFS='|' read -r model description; do
+    [[ -n $model ]] || continue
+    model_count=$((model_count + 1))
+    models[$model_count]=$model
+    printf '%d) %s (%s)\n' "$model_count" "$model" "$description"
+    if [[ $model == "$menu_default_model" ]]; then
+      default_choice=$model_count
+    fi
+  done <<< {{ vars.models | quote }}
+
+  context_32k_choice=$((model_count + 1))
+  context_64k_choice=$((model_count + 2))
+  printf '%d) Set context length to 32K (32768)\n' "$context_32k_choice"
+  printf '%d) Set context length to 64K (65536)\n' "$context_64k_choice"
   echo "0) Quit"
   echo ""
-  read -r -p "Select a model (1-$model_count, 11-12 for context, 0 to quit) [8]: " choice
-  choice=${choice:-8}
+  read -r -p "Select an option [$default_choice]: " choice
+  choice=${choice:-$default_choice}
   if [[ $choice == 0 ]]; then
     echo "No changes made."
     exit 0
   fi
-  if [[ $choice == 11 || $choice == 12 ]]; then
-    if [[ $choice == 11 ]]; then
+  if [[ $choice == "$context_32k_choice" || $choice == "$context_64k_choice" ]]; then
+    if [[ $choice == "$context_32k_choice" ]]; then
       new_context=32768
     else
       new_context=65536
@@ -96,11 +91,17 @@ else
     echo "Run 'mise run local' to use it."
     exit 0
   fi
-  if [[ ! $choice =~ ^[0-9]+$ ]] || (( choice < 1 || choice > model_count )); then
+  selected_model=
+  for number in "${!models[@]}"; do
+    if [[ $choice == "$number" ]]; then
+      selected_model=${models[$number]}
+      break
+    fi
+  done
+  if [[ -z $selected_model ]]; then
     echo "Invalid selection" >&2
     exit 1
   fi
-  selected_model=${models[$((choice-1))]}
 fi
 
 if ! command -v ollama >/dev/null 2>&1; then
