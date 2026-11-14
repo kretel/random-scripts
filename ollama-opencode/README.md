@@ -20,6 +20,18 @@ mise run select-model qwen3-coder-next:q4_K_M
 
 To customize the menu, edit `models` in [mise.toml](mise.toml). Use one `tag|description` line per model.
 
+Check whether every configured model has a local manifest:
+
+```sh
+mise run check-models
+```
+
+The task marks fetched models with `✓` and missing models with `✗`, then prints a summary. It reads `OLLAMA_MODELS` (default: `~/.ollama/models`) without starting Ollama or downloading models. Both legacy and v2 manifest directories are checked. Missing manifests are reported without failing the task. The check covers manifest presence, not the completeness of model weights.
+
+The implementation lives in [scripts/check-models.sh](scripts/check-models.sh). Mise passes the configured `models` list through standard input.
+
+Run `mise run show-check-models-command` to print the project path, its shell-quoted form, an example with a space, and the complete rendered command without executing the check.
+
 ## Taskfile
 
 Install [Task](https://taskfile.dev/docs/installation), then from this directory run:
@@ -47,5 +59,7 @@ mise run opencode
 The `opencode` task runs `pre-check` first. You can also run `mise run pre-check` on its own to check that Ollama and OpenCode 2.x are installed and that the server port is free.
 
 Each `opencode` invocation starts a private Ollama server on `127.0.0.1:11435` and stops it afterward. OpenCode uses a temporary private profile and its sessions are discarded at exit. It runs in this directory; place the `mise.toml` in the project you want to work on. Verification sends a real prompt through OpenCode and displays Ollama's loaded model.
+
+The task reads the selected model's capabilities from `ollama show` instead of assuming every model supports tools. Models without tool support, such as the listed Mixtral model, prompt `Continue in text-only mode? [y/N]`. Enter `y` or `yes` to continue; Enter, any other answer, or closed input cancels successfully and stops the temporary server. Select a model with tool support to let OpenCode read files, edit code, or run shell commands.
 
 For either workflow, after launching OpenCode, ask it to read a small non-sensitive file and report its contents to check agent tool use. Ask it to make a disposable edit and confirm that it requests approval. Review responses and permissions before using it on important work. Local inference does not sandbox the agent or prevent approved shell commands, existing integrations, plugins, or broader system settings from using the network. Downloads require internet access.
