@@ -13,13 +13,34 @@
 qwen_model = "deepseek-r1:32b"
 ollama_address = "127.0.0.1"
 ollama_port = "11435"
-ollama_context_length = "32768"
+ollama_context_length = "65536"
+_.file = ".env"
 
 [tasks.select-model]
 description = "Select a model to use for local coding"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
+
+env_file={{ config_root | quote }}/.env
+
+save_local_var() {
+  local key=$1 value=$2 input=/dev/null tmp
+  if [[ -f "$env_file" ]]; then
+    input=$env_file
+  fi
+  tmp=$(mktemp "$env_file.XXXXXX") || return 1
+  if awk -v key="$key" '
+    $0 !~ ("^[[:space:]]*(export[[:space:]]+)?" key "[[:space:]]*=")
+  ' "$input" > "$tmp" &&
+    printf '%s=%s\n' "$key" "$value" >> "$tmp" &&
+    mv -f "$tmp" "$env_file"; then
+    return 0
+  fi
+  rm -f "$tmp"
+  printf 'Could not save %s to %s.\n' "$key" "$env_file" >&2
+  return 1
+}
 
 models=(
   "deepseek-r1:32b"
@@ -70,7 +91,7 @@ else
     else
       new_context=65536
     fi
-    sed -i '' "s|^ollama_context_length = .*|ollama_context_length = \"$new_context\"|" "{{config_root}}/mise.toml"
+    save_local_var ollama_context_length "$new_context"
     echo "Context length updated to: $new_context"
     echo "Run 'mise run local' to use it."
     exit 0
@@ -132,11 +153,8 @@ else
   OLLAMA_HOST=$ollama_host ollama pull "$selected_model"
 fi
 
-# Update the qwen_model variable only after the model is available.
-escaped_model=${selected_model//\\/\\\\}
-escaped_model=${escaped_model//&/\\&}
-escaped_model=${escaped_model//|/\\|}
-sed -i '' "s|^qwen_model = .*|qwen_model = \"$escaped_model\"|" "{{config_root}}/mise.toml"
+# Save the selection only after the model is available.
+save_local_var qwen_model "$selected_model"
 
 echo "Model updated to: $selected_model"
 echo "Run 'mise run local verify' to test it."

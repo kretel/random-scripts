@@ -1,6 +1,6 @@
 # Local Qwen coding setup
 
-Choose either workflow on macOS. Both use Homebrew, Ollama, and OpenCode 2.x. The Taskfile workflow uses `qwen2.5-coder:32b-instruct-q4_K_M` (~19 GB); the mise workflow uses whichever model is selected in `mise.toml` (currently `deepseek-r1:32b`). Install Homebrew and the runner you choose first; setup installs missing Ollama and OpenCode. Neither workflow pins software versions or model digests.
+Choose either workflow on macOS. Both use Homebrew, Ollama, and OpenCode 2.x. The Taskfile workflow uses `qwen2.5-coder:32b-instruct-q4_K_M` (~19 GB); the mise workflow defaults to `deepseek-r1:32b`. Install Homebrew and the runner you choose first; setup installs missing Ollama and OpenCode. Neither workflow pins software versions or model digests.
 
 ## Model Selection
 
@@ -10,6 +10,8 @@ mise run select-model
 ```
 
 Select `0` to quit without changing the model. Select `11` for a 32K context (`32768`) or `12` for a 64K context (`65536`). When you switch, the task checks whether the model is already pulled and pulls it if it is missing.
+
+The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run local` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`.
 
 You can also pass a model directly:
 ```sh
