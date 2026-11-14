@@ -11,7 +11,7 @@ mise run select-model
 
 Select `0` to quit. The 32K and 64K context options appear after the last model. Press Enter to select the model configured as `menu_default_model`. When you switch, the task checks whether the model is already pulled and pulls it if it is missing.
 
-The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run local` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`.
+The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run opencode` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`.
 
 You can also pass a model directly:
 ```sh
@@ -39,11 +39,13 @@ Install [mise](https://mise.jdx.dev/getting-started), then from this directory r
 
 ```sh
 mise trust
-mise run local setup
-mise run local verify
-mise run local
+mise run opencode setup
+mise run opencode verify
+mise run opencode
 ```
 
-Each invocation starts a private Ollama server on `127.0.0.1:11435` and stops it afterward. Port 11435 must be free. OpenCode uses a temporary private profile and its sessions are discarded at exit. It runs in this directory; place the `mise.toml` in the project you want to work on. Verification sends a real prompt through OpenCode and displays Ollama's loaded model.
+The `opencode` task runs `pre-check` first. You can also run `mise run pre-check` on its own to check that Ollama and OpenCode 2.x are installed and that the server port is free.
+
+Each `opencode` invocation starts a private Ollama server on `127.0.0.1:11435` and stops it afterward. OpenCode uses a temporary private profile and its sessions are discarded at exit. It runs in this directory; place the `mise.toml` in the project you want to work on. Verification sends a real prompt through OpenCode and displays Ollama's loaded model.
 
 For either workflow, after launching OpenCode, ask it to read a small non-sensitive file and report its contents to check agent tool use. Ask it to make a disposable edit and confirm that it requests approval. Review responses and permissions before using it on important work. Local inference does not sandbox the agent or prevent approved shell commands, existing integrations, plugins, or broader system settings from using the network. Downloads require internet access.

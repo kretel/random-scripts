@@ -1,0 +1,15 @@
+monorepo_root = true
+
+[monorepo]
+config_roots = ["ollama-opencode"]
+
+
+[monorepo.path_aliases]
+"oll" = "ollama-opencode"
+
+[tasks.default]
+description = "List all available tasks"
+run = "mise tasks --all"
+
+[tools]
+

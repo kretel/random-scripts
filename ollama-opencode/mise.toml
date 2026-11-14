@@ -13,7 +13,7 @@ llama3:70b-instruct-q4_K_M|43 GB, general purpose; tight on 64 GB
 mixtral:8x7b-instruct-v0.1-q4_K_M|28 GB, MoE general purpose
 """
 menu_default_model = "nemotron-3.5-lightning:30b-a3b-q4_K_M"
-qwen_model = "deepseek-r1:32b"
+default_model = "deepseek-r1:32b"
 ollama_address = "127.0.0.1"
 ollama_port = "11435"
 ollama_context_length = "32768"
@@ -55,57 +55,53 @@ if [[ $# -eq 1 ]]; then
 else
   menu_default_model={{ vars.menu_default_model | quote }}
   default_choice=0
-  model_count=0
-  models=()
+  next_choice=1
+  choices=("quit")
+  context_sizes=(32768 65536)
+
   echo "Available models:"
   while IFS='|' read -r model description; do
     [[ -n $model ]] || continue
-    model_count=$((model_count + 1))
-    models[$model_count]=$model
-    printf '%d) %s (%s)\n' "$model_count" "$model" "$description"
+    choices[$next_choice]="model:$model"
+    printf '%d) %s (%s)\n' "$next_choice" "$model" "$description"
     if [[ $model == "$menu_default_model" ]]; then
-      default_choice=$model_count
+      default_choice=$next_choice
     fi
+    next_choice=$((next_choice + 1))
   done <<< {{ vars.models | quote }}
 
-  context_32k_choice=$((model_count + 1))
-  context_64k_choice=$((model_count + 2))
-  printf '%d) Set context length to 32K (32768)\n' "$context_32k_choice"
-  printf '%d) Set context length to 64K (65536)\n' "$context_64k_choice"
+  for context_size in "${context_sizes[@]}"; do
+    choices[$next_choice]="context:$context_size"
+    printf '%d) Set context length to %dK (%d)\n' \
+      "$next_choice" "$((context_size / 1024))" "$context_size"
+    next_choice=$((next_choice + 1))
+  done
   echo "0) Quit"
   echo ""
-  read -r -p "Select an option [$default_choice]: " choice
+
+  read -r -p "Select an option (default now [$default_choice]): " choice
   choice=${choice:-$default_choice}
-  if [[ $choice == 0 ]]; then
-    echo "No changes made."
-    exit 0
+  selection=
+  if [[ $choice != *[!0-9]* && " ${!choices[*]} " == *" $choice "* ]]; then
+    selection=${choices[$choice]}
   fi
-  if [[ $choice == "$context_32k_choice" || $choice == "$context_64k_choice" ]]; then
-    if [[ $choice == "$context_32k_choice" ]]; then
-      new_context=32768
-    else
-      new_context=65536
-    fi
-    save_local_var ollama_context_length "$new_context"
-    echo "Context length updated to: $new_context"
-    echo "Run 'mise run local' to use it."
-    exit 0
-  fi
-  selected_model=
-  for number in "${!models[@]}"; do
-    if [[ $choice == "$number" ]]; then
-      selected_model=${models[$number]}
-      break
-    fi
-  done
-  if [[ -z $selected_model ]]; then
-    echo "Invalid selection" >&2
-    exit 1
-  fi
+
+  case "$selection" in
+    model:*) selected_model=${selection#model:} ;;
+    context:*)
+      context_size=${selection#context:}
+      save_local_var ollama_context_length "$context_size"
+      echo "Context length updated to: $context_size"
+      echo "Run 'mise run opencode' to use it."
+      exit 0
+      ;;
+    quit) echo "No changes made."; exit 0 ;;
+    *) echo "Invalid selection" >&2; exit 1 ;;
+  esac
 fi
 
 if ! command -v ollama >/dev/null 2>&1; then
-  printf 'Ollama is required to check and pull %s. Run mise run local setup first.\n' "$selected_model" >&2
+  printf 'Ollama is required to check and pull %s. Run mise run opencode setup first.\n' "$selected_model" >&2
   exit 1
 fi
 
@@ -155,10 +151,10 @@ else
 fi
 
 # Save the selection only after the model is available.
-save_local_var qwen_model "$selected_model"
+save_local_var default_model "$selected_model"
 
 echo "Model updated to: $selected_model"
-echo "Run 'mise run local verify' to test it."
+echo "Run 'mise run opencode verify' to test it."
 '''
 
 [tasks.select-model.env]
@@ -166,24 +162,21 @@ OLLAMA_HOST = "{{ vars.ollama_address }}:{{ vars.ollama_port }}"
 NO_PROXY = "{{ vars.ollama_address }},localhost"
 no_proxy = "{{ vars.ollama_address }},localhost"
 
-[tasks.local]
-description = "Run the local coding stack: mise run local [setup|verify|launch]"
+
+[tasks.pre-check]
+description = "Check Ollama, OpenCode 2.x, and the local server port"
 dir = "{{config_root}}"
+quiet = false
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 
-action=${1:-launch}
-case "$action" in
-  setup|verify|launch) ;;
-  *) printf 'Usage: mise run local [setup|verify|launch]\n' >&2; exit 2 ;;
-esac
-if [[ $# -gt 1 ]]; then
-  printf 'Usage: mise run local [setup|verify|launch]\n' >&2
+if [[ $# -gt 1 || ( $# -eq 1 && $1 != setup ) ]]; then
+  printf 'Usage: mise run pre-check [setup]\n' >&2
   exit 2
 fi
 
-if [[ "$action" == setup ]]; then
+if [[ ${1:-} == setup ]]; then
   for package in ollama opencode; do
     if ! command -v "$package" >/dev/null; then
       if ! command -v brew >/dev/null; then
@@ -196,26 +189,59 @@ if [[ "$action" == setup ]]; then
 fi
 
 for executable in ollama opencode; do
-  if ! command -v "$executable" >/dev/null; then
-    printf 'Missing %s. Run mise run local setup.\n' "$executable" >&2
+  if ! executable_path=$(command -v "$executable"); then
+    printf 'Missing %s. Run mise run opencode setup.\n' "$executable" >&2
     exit 1
   fi
+  printf 'Found %s at %s\n' "$executable" "$executable_path"
 done
 
-opencode_version=$(opencode --version)
+if ! opencode_version=$(opencode --version); then
+  printf 'Could not read the OpenCode version.\n' >&2
+  exit 1
+fi
 version_number=${opencode_version#opencode }
 case "${version_number#v}" in
-  2.*) ;;
+  2.*) printf 'OpenCode version: %s (requires 2.x)\n' "$version_number" ;;
   *) printf 'This setup requires OpenCode 2.x; found %s.\n' "$opencode_version" >&2; exit 1 ;;
 esac
 
-model={{ vars.qwen_model | quote }}
-ollama_port=${OLLAMA_HOST##*:}
+ollama_port={{ vars.ollama_port | quote }}
+if ! command -v lsof >/dev/null; then
+  printf 'Missing lsof. Cannot check whether port %s is free.\n' "$ollama_port" >&2
+  exit 1
+fi
 if lsof -nP -iTCP:"$ollama_port" -sTCP:LISTEN >/dev/null; then
   printf 'Port %s is in use. Close the process using it before retrying.\n' "$ollama_port" >&2
   exit 1
 fi
+printf 'Ollama port %s is free.\n' "$ollama_port"
+'''
 
+[tasks.opencode]
+description = "Run the local coding stack: mise run opencode [setup|verify|launch]"
+dir = "{{config_root}}"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+action=${1:-launch}
+case "$action" in
+  setup|verify|launch) ;;
+  *) printf 'Usage: mise run opencode [setup|verify|launch]\n' >&2; exit 2 ;;
+esac
+if [[ $# -gt 1 ]]; then
+  printf 'Usage: mise run opencode [setup|verify|launch]\n' >&2
+  exit 2
+fi
+
+if [[ "$action" == setup ]]; then
+  mise run pre-check setup
+else
+  mise run pre-check
+fi
+
+model={{ vars.default_model | quote }}
 umask 077
 profile=$(mktemp -d "${TMPDIR:-/tmp}/mise-local-code.XXXXXX")
 ollama_pid=
@@ -252,11 +278,11 @@ if [[ "$action" == setup ]] && ! ollama show "$model" >/dev/null 2>&1; then
   ollama pull "$model"
 fi
 if ! ollama show "$model" >/dev/null; then
-  printf 'The local model is unavailable. Run mise run local setup.\n' >&2
+  printf 'The local model is unavailable. Run mise run opencode setup.\n' >&2
   exit 1
 fi
 if [[ "$action" == setup ]]; then
-  printf 'Setup complete. Run mise run local verify, then mise run local.\n'
+  printf 'Setup complete. Run mise run opencode verify, then mise run opencode.\n'
   exit 0
 fi
 
@@ -289,8 +315,8 @@ cat > "$profile/config/opencode/opencode.json" <<JSON
     { "action": "shell", "resource": "*", "effect": "ask" },
     { "action": "edit", "resource": "*", "effect": "ask" },
     { "action": "external_directory", "resource": "*", "effect": "ask" },
-    { "action": "webfetch", "resource": "*", "effect": "deny" },
-    { "action": "websearch", "resource": "*", "effect": "deny" }
+    { "action": "webfetch", "resource": "*", "effect": "ask" },
+    { "action": "websearch", "resource": "*", "effect": "ask" }
   ]
 }
 JSON
@@ -318,7 +344,7 @@ else
 fi
 '''
 
-[tasks.local.env]
+[tasks.opencode.env]
 OLLAMA_HOST = "{{ vars.ollama_address }}:{{ vars.ollama_port }}"
 OLLAMA_CONTEXT_LENGTH = "{{ vars.ollama_context_length }}"
 OLLAMA_NO_CLOUD = "1"
