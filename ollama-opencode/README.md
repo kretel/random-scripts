@@ -1,6 +1,10 @@
-# Local Qwen coding setup
+# Local Qwen & DeepSeek Coding Setup
 
-Choose either workflow on macOS. Both use Homebrew, Ollama, and OpenCode 2.x. The Taskfile workflow uses `qwen2.5-coder:32b-instruct-q4_K_M` (~19 GB); the mise workflow defaults to `deepseek-r1:32b`. Install Homebrew and the runner you choose first; setup installs missing Ollama and OpenCode. Neither workflow pins software versions or model digests.
+Choose either workflow on macOS. Both use Homebrew, Ollama, and OpenCode 2.x.
+Set up local LLM inference for rapid prototyping and testing.
+The Taskfile workflow uses `qwen2.5-coder:32b-instruct-q4_K_M` (~19 GB), while the mise workflow defaults to `deepseek-r1:32b`.
+Install Homebrew and the runner you choose first; setup installs missing Ollama and OpenCode.
+Neither workflow pins software versions or model digests.
 
 ## Model Selection
 
@@ -8,17 +12,19 @@ To switch between different models, run:
 ```sh
 mise run select-model
 ```
+### Why you’d want to switch
+Switching models lets you balance context length against memory usage: 32K models fit comfortably on a laptop, while 64K models give more room for large codebases or complex prompts.
 
 Select `0` to quit. The 32K and 64K context options appear after the last model. Press Enter to select the model configured as `menu_default_model`. When you switch, the task checks whether the model is already pulled and pulls it if it is missing.
 
-The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run opencode` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`.
+The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run opencode` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`. The `.env` file is automatically ignored by Git, so keep any secrets or tokens there safely.
 
 You can also pass a model directly:
 ```sh
 mise run select-model qwen3-coder-next:q4_K_M
 ```
 
-To customize the menu, edit `models` in [mise.toml](mise.toml). Use one `tag|description` line per model.
+To customize the menu, edit `models` in [mise.toml](mise.toml). Use one `tag|description` line per model. For example, add `my-model|My custom model` to the `models` array.
 
 Check whether every configured model has a local manifest:
 
@@ -32,7 +38,7 @@ The implementation lives in [scripts/check-models.sh](scripts/check-models.sh). 
 
 Run `mise run show-check-models-command` to print the project path, its shell-quoted form, an example with a space, and the complete rendered command without executing the check.
 
-## Taskfile
+## Taskfile workflow
 
 Install [Task](https://taskfile.dev/docs/installation), then from this directory run:
 
@@ -58,8 +64,10 @@ mise run opencode
 
 The `opencode` task runs `pre-check` first. You can also run `mise run pre-check` on its own to check that Ollama and OpenCode 2.x are installed and that the server port is free.
 
-Each `opencode` invocation starts a private Ollama server on `127.0.0.1:11435` and stops it afterward. OpenCode uses a temporary private profile and its sessions are discarded at exit. It runs in this directory; place the `mise.toml` in the project you want to work on. Verification sends a real prompt through OpenCode and displays Ollama's loaded model.
+Each `opencode` invocation starts a private Ollama server on `127.0.0.1:11435` and stops it afterward. OpenCode uses a temporary private profile and its sessions are discarded at exit. It runs in this directory; place the `mise.toml` in the project you want to work on. Verification sends a real prompt through OpenCode and displays Ollama's loaded model. If you need a different port, edit `mise.toml` under `[opencode] port = 12345`.
 
 The task reads the selected model's capabilities from `ollama show` instead of assuming every model supports tools. Models without tool support, such as the listed Mixtral model, prompt `Continue in text-only mode? [y/N]`. Enter `y` or `yes` to continue; Enter, any other answer, or closed input cancels successfully and stops the temporary server. Select a model with tool support to let OpenCode read files, edit code, or run shell commands.
+
+## Security & Sandbox
 
 For either workflow, after launching OpenCode, ask it to read a small non-sensitive file and report its contents to check agent tool use. Ask it to make a disposable edit and confirm that it requests approval. Review responses and permissions before using it on important work. Local inference does not sandbox the agent or prevent approved shell commands, existing integrations, plugins, or broader system settings from using the network. Downloads require internet access.

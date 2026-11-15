@@ -1,13 +1,19 @@
 [vars]
 # One model tag and description per line, separated by |.
 models = """
+deepseek-r1:8b|5.2 GB, lightweight reasoning
 deepseek-r1:32b|20 GB, reasoning/thinking
+deepseek-r1:70b|40 GB, reasoning/thinking
+gpt-oss:20b|14 GB, text reasoning with adjustable effort
 qwen3-coder-next:q4_K_M|52 GB, agentic coding; tight on 64 GB
+qwen3.8:27b|18 GB, standard build for reasoning and coding
 qwen3.8:27b-q8_0|27 GB, high-precision general/coding
 qwen3-coder:30b-a3b-q4_K_M|19 GB, fast agentic coding
 qwen2.5-coder:32b-instruct-q4_K_M|20 GB, code generation/repair
 glm-4.7-flash:q4_K_M|17 GB, fast general purpose
+gemma4:26b-nvfp4|16 GB, general use with image input
 nemotron-3.5-lightning:30b-a3b-q4_K_M|25 GB, agent-focused MoE
+muse-glimmer:30b-nvfp4|17 GB, document research and tool use
 llama3:70b-instruct-q4_K_M|43 GB, general purpose; tight on 64 GB
 mixtral:8x7b-instruct-v0.1-q4_K_M|28 GB, MoE general purpose
 """
