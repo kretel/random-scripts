@@ -32,12 +32,7 @@ _.file = ".env"
 description = "Fetch or update the local copies of the skill repositories"
 dir = "{{config_root}}"
 quiet = true
-run = """
-mise bootstrap repos update --yes \\
-  .skill-sources/mattpocock/skills \\
-  .skill-sources/travisvn/awesome-claude-skills \\
-  .skill-sources/obra/superpowers
-"""
+run = "mise bootstrap repos update --yes"
 
 [tasks.check-models]
 description = "Check local manifests for all configured models"
@@ -145,10 +140,7 @@ if ! command -v ollama >/dev/null 2>&1; then
   exit 1
 fi
 
-ollama_host=${OLLAMA_HOST:-127.0.0.1:11435}
-server_ready() {
-  curl --noproxy '*' --max-time 1 --fail --silent "http://$ollama_host/api/version" >/dev/null 2>&1
-}
+source {{ config_root | quote }}/scripts/ollama-lib.sh
 
 profile=
 ollama_pid=
@@ -163,31 +155,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if ! server_ready; then
+if ! ollama_ready; then
   profile=$(mktemp -d "${TMPDIR:-/tmp}/mise-select-model.XXXXXX")
-  OLLAMA_HOST=$ollama_host ollama serve >"$profile/ollama.log" 2>&1 &
-  ollama_pid=$!
-  ready=false
-  for (( attempt=0; attempt<60; attempt++ )); do
-    kill -0 "$ollama_pid" 2>/dev/null || break
-    if server_ready; then
-      ready=true
-      break
-    fi
-    sleep 1
-  done
-  if [[ "$ready" != true ]]; then
-    cat "$profile/ollama.log" >&2
-    printf 'Ollama did not start on %s.\n' "$ollama_host" >&2
-    exit 1
-  fi
+  ollama_start "$profile/ollama.log" || exit 1
 fi
 
-if OLLAMA_HOST=$ollama_host ollama show "$selected_model" >/dev/null 2>&1; then
+if ollama show "$selected_model" >/dev/null 2>&1; then
   printf '%s is already pulled.\n' "$selected_model"
 else
   printf '%s is not pulled; pulling now...\n' "$selected_model"
-  OLLAMA_HOST=$ollama_host ollama pull "$selected_model"
+  ollama pull "$selected_model"
 fi
 
 # Save the selection only after the model is available.
@@ -199,6 +176,7 @@ echo "Run 'mise run opencode verify' to test it."
 
 [tasks.select-model.env]
 OLLAMA_HOST = "{{ vars.ollama_address }}:{{ vars.ollama_port }}"
+OLLAMA_NO_CLOUD = "1"
 NO_PROXY = "{{ vars.ollama_address }},localhost"
 no_proxy = "{{ vars.ollama_address }},localhost"
 
@@ -301,23 +279,9 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-ollama serve >"$profile/ollama.log" 2>&1 &
-ollama_pid=$!
-ready=false
-for (( attempt=0; attempt<60; attempt++ )); do
-  kill -0 "$ollama_pid" 2>/dev/null || break
-  if grep -Fq "Listening on $OLLAMA_HOST" "$profile/ollama.log" &&
-    curl --noproxy '*' --max-time 1 --fail --silent "http://$OLLAMA_HOST/api/version" >/dev/null; then
-    ready=true
-    break
-  fi
-  sleep 1
-done
-if [[ "$ready" == false ]]; then
-  cat "$profile/ollama.log" >&2
-  printf 'Ollama did not start on %s.\n' "$OLLAMA_HOST" >&2
-  exit 1
-fi
+source {{ config_root | quote }}/scripts/ollama-lib.sh
+# pre-check confirmed the port was free, so a responding API is this server.
+ollama_start "$profile/ollama.log" || exit 1
 
 if [[ "$action" == setup ]] && ! ollama show "$model" >/dev/null 2>&1; then
   ollama pull "$model"
