@@ -82,6 +82,10 @@ fi
 
 if [[ $# -eq 1 ]]; then
   selected_model=$1
+  if [[ ! $selected_model =~ ^[A-Za-z0-9._:/-]+$ ]]; then
+    printf 'Invalid model name: %s\n' "$selected_model" >&2
+    exit 2
+  fi
 else
   menu_default_model={{ vars.menu_default_model | quote }}
   default_choice=0
@@ -265,6 +269,10 @@ if [[ $# -gt 1 ]]; then
   printf 'Usage: mise run opencode [setup|verify|launch]\n' >&2
   exit 2
 fi
+if [[ ! $OLLAMA_CONTEXT_LENGTH =~ ^[1-9][0-9]*$ ]]; then
+  printf 'Invalid ollama_context_length: %s\n' "$OLLAMA_CONTEXT_LENGTH" >&2
+  exit 1
+fi
 
 if [[ "$action" == setup ]]; then
   mise run pre-check setup
@@ -313,6 +321,11 @@ if ! model_info=$(ollama show "$model"); then
   exit 1
 fi
 
+if [[ "$action" == setup ]]; then
+  printf 'Setup complete. Run mise run opencode verify, then mise run opencode.\n'
+  exit 0
+fi
+
 supports_tools=false
 if awk '
   $1 == "Capabilities" { capabilities = 1; next }
@@ -340,11 +353,6 @@ else
     [yY]|[yY][eE][sS]) ;;
     *) printf 'Cancelled.\n'; exit 0 ;;
   esac
-fi
-
-if [[ "$action" == setup ]]; then
-  printf 'Setup complete. Run mise run opencode verify, then mise run opencode.\n'
-  exit 0
 fi
 
 # Use a private profile and server so existing settings and sessions are not loaded.

@@ -13,18 +13,18 @@ To switch between different models, run:
 mise run select-model
 ```
 ### Why you’d want to switch
-Switching models lets you balance context length against memory usage: 32K models fit comfortably on a laptop, while 64K models give more room for large codebases or complex prompts.
+Switching lets you balance capability against memory usage. The context options trade memory for room: a 32K context uses less memory, while a 64K context gives more room for large codebases or complex prompts.
 
 Select `0` to quit. The 32K and 64K context options appear after the last model. Press Enter to select the model configured as `menu_default_model`. When you switch, the task checks whether the model is already pulled and pulls it if it is missing.
 
-The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run opencode` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`. The `.env` file is automatically ignored by Git, so keep any secrets or tokens there safely.
+The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run opencode` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`. The `.env` file is ignored by Git.
 
 You can also pass a model directly:
 ```sh
 mise run select-model qwen3-coder-next:q4_K_M
 ```
 
-To customize the menu, edit `models` in [mise.toml](mise.toml). Use one `tag|description` line per model. For example, add `my-model|My custom model` to the `models` array.
+To customize the menu, edit `models` in [mise.toml](mise.toml). Use one `tag|description` line per model. For example, add a `my-model|My custom model` line inside the `models` string.
 
 Check whether every configured model has a local manifest:
 
@@ -35,8 +35,6 @@ mise run check-models
 The task marks fetched models with `✓` and missing models with `✗`, then prints a summary. It reads `OLLAMA_MODELS` (default: `~/.ollama/models`) without starting Ollama or downloading models. Both legacy and v2 manifest directories are checked. Missing manifests are reported without failing the task. The check covers manifest presence, not the completeness of model weights.
 
 The implementation lives in [scripts/check-models.sh](scripts/check-models.sh). Mise passes the configured `models` list through standard input.
-
-Run `mise run show-check-models-command` to print the project path, its shell-quoted form, an example with a space, and the complete rendered command without executing the check.
 
 ## Pull skill repositories
 
@@ -77,7 +75,7 @@ mise run opencode
 
 The `opencode` task runs `pre-check` first. You can also run `mise run pre-check` on its own to check that Ollama and OpenCode 2.x are installed and that the server port is free.
 
-Each `opencode` invocation starts a private Ollama server on `127.0.0.1:11435` and stops it afterward. OpenCode uses a temporary private profile and its sessions are discarded at exit. It runs in this directory; place the `mise.toml` in the project you want to work on. Verification sends a real prompt through OpenCode and displays Ollama's loaded model. If you need a different port, edit `mise.toml` under `[opencode] port = 12345`.
+Each `opencode` invocation starts a private Ollama server on `127.0.0.1:11435` and stops it afterward. OpenCode uses a temporary private profile and its sessions are discarded at exit. It runs in this directory; place the `mise.toml` in the project you want to work on. Verification sends a real prompt through OpenCode and displays Ollama's loaded model. To use a different port, change `ollama_port` under `[vars]` in `mise.toml`.
 
 The task reads the selected model's capabilities from `ollama show` instead of assuming every model supports tools. Models without tool support, such as the listed Mixtral model, prompt `Continue in text-only mode? [y/N]`. Enter `y` or `yes` to continue; Enter, any other answer, or closed input cancels successfully and stops the temporary server. Select a model with tool support to let OpenCode read files, edit code, or run shell commands.
 
