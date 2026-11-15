@@ -15,7 +15,7 @@ mise run select-model
 ### Why you’d want to switch
 Switching lets you balance capability against memory usage. The context options trade memory for room: a 32K context uses less memory, while a 64K context gives more room for large codebases or complex prompts.
 
-Select `0` to quit. The 32K and 64K context options appear after the last model. Press Enter to select the model configured as `menu_default_model`. When you switch, the task checks whether the model is already pulled and pulls it if it is missing.
+Select `0` to quit. The 32K and 64K context options appear after the last model. The menu marks the model and context length in use with `[current]`; press Enter to keep the current model. When you switch, the task checks whether the model is already pulled and pulls it if it is missing.
 
 The selector saves your model and context choices in the Git-ignored `.env` next to `mise.toml`. The next `mise run opencode` uses those choices. Remove either setting from `.env` to use its default from `mise.toml`. The `.env` file is ignored by Git.
 

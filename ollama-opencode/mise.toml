@@ -17,7 +17,6 @@ muse-glimmer:30b-nvfp4|17 GB, document research and tool use
 llama3:70b-instruct-q4_K_M|43 GB, general purpose; tight on 64 GB
 mixtral:8x7b-instruct-v0.1-q4_K_M|28 GB, MoE general purpose
 """
-menu_default_model = "nemotron-3.5-lightning:30b-a3b-q4_K_M"
 default_model = "deepseek-r1:32b"
 ollama_address = "127.0.0.1"
 ollama_port = "11435"
@@ -87,7 +86,8 @@ if [[ $# -eq 1 ]]; then
     exit 2
   fi
 else
-  menu_default_model={{ vars.menu_default_model | quote }}
+  current_model={{ vars.default_model | quote }}
+  current_context={{ vars.ollama_context_length | quote }}
   default_choice=0
   next_choice=1
   choices=("quit")
@@ -97,17 +97,23 @@ else
   while IFS='|' read -r model description; do
     [[ -n $model ]] || continue
     choices[$next_choice]="model:$model"
-    printf '%d) %s (%s)\n' "$next_choice" "$model" "$description"
-    if [[ $model == "$menu_default_model" ]]; then
+    marker=
+    if [[ $model == "$current_model" ]]; then
       default_choice=$next_choice
+      marker=' [current]'
     fi
+    printf '%d) %s (%s)%s\n' "$next_choice" "$model" "$description" "$marker"
     next_choice=$((next_choice + 1))
   done <<< {{ vars.models | quote }}
 
   for context_size in "${context_sizes[@]}"; do
     choices[$next_choice]="context:$context_size"
-    printf '%d) Set context length to %dK (%d)\n' \
-      "$next_choice" "$((context_size / 1024))" "$context_size"
+    marker=
+    if [[ $context_size == "$current_context" ]]; then
+      marker=' [current]'
+    fi
+    printf '%d) Set context length to %dK (%d)%s\n' \
+      "$next_choice" "$((context_size / 1024))" "$context_size" "$marker"
     next_choice=$((next_choice + 1))
   done
   echo "0) Quit"
