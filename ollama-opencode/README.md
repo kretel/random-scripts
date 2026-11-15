@@ -38,6 +38,19 @@ The implementation lives in [scripts/check-models.sh](scripts/check-models.sh). 
 
 Run `mise run show-check-models-command` to print the project path, its shell-quoted form, an example with a space, and the complete rendered command without executing the check.
 
+## Pull skill repositories
+
+From this directory, run `mise run pull-skills`. It clones or updates
+[Matt Pocock's skills](https://github.com/mattpocock/skills),
+[Awesome Claude Skills](https://github.com/travisvn/awesome-claude-skills), and
+[Superpowers](https://github.com/obra/superpowers) under the Git-ignored
+`.skill-sources/` directory. The task uses mise's `[bootstrap.repos]`
+configuration and fast-forwards existing checkouts. To preview the initial
+clones, run `mise bootstrap repos apply --dry-run` from this directory.
+Awesome Claude Skills is a directory of links. The task downloads the three
+repositories for inspection. Installing individual skills or enabling the
+Superpowers plugin in OpenCode is a separate step.
+
 ## Taskfile workflow
 
 Install [Task](https://taskfile.dev/docs/installation), then from this directory run:

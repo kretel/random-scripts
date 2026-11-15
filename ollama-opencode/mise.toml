@@ -24,6 +24,22 @@ ollama_port = "11435"
 ollama_context_length = "32768"
 _.file = ".env"
 
+[bootstrap.repos]
+".skill-sources/mattpocock/skills" = { url = "https://github.com/mattpocock/skills.git" }
+".skill-sources/travisvn/awesome-claude-skills" = { url = "https://github.com/travisvn/awesome-claude-skills.git" }
+".skill-sources/obra/superpowers" = { url = "https://github.com/obra/superpowers.git" }
+
+[tasks.pull-skills]
+description = "Fetch or update the local copies of the skill repositories"
+dir = "{{config_root}}"
+quiet = true
+run = """
+mise bootstrap repos update --yes \\
+  .skill-sources/mattpocock/skills \\
+  .skill-sources/travisvn/awesome-claude-skills \\
+  .skill-sources/obra/superpowers
+"""
+
 [tasks.check-models]
 description = "Check local manifests for all configured models"
 quiet = true
